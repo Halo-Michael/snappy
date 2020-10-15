@@ -27,6 +27,8 @@ kern_return_t IOObjectRelease(io_object_t object );
 static char *copyBootHash(void);
 #define APPLESNAP "com.apple.os.update-"
 
+bool READ_NEW_IORegistryEntry = true;
+
 __attribute__((aligned(4)))
 typedef struct val_attrs {
 	uint32_t		length;
@@ -143,12 +145,17 @@ static char *copyBootHash(void)
 		return NULL;
 	}
 
-	CFDataRef hash = (CFDataRef)IORegistryEntryCreateCFProperty(chosen, CFSTR("boot-manifest-hash"), kCFAllocatorDefault, 0);
+    CFDataRef hash = (CFDataRef)IORegistryEntryCreateCFProperty(chosen, CFSTR("root-snapshot-name"), kCFAllocatorDefault, 0);
+
+    if (hash == nil) {
+        READ_NEW_IORegistryEntry = false;
+        hash = (CFDataRef)IORegistryEntryCreateCFProperty(chosen, CFSTR("boot-manifest-hash"), kCFAllocatorDefault, 0);
+    }
 
 	IOObjectRelease(chosen);
 
 	if (hash == nil) {
-		fprintf(stderr, "Unable to read boot-manifest-hash\n");
+		fprintf(stderr, "Unable to read neither root-snapshot-name nor boot-manifest-hash\n");
 		return NULL;
 	}
 
@@ -160,18 +167,31 @@ static char *copyBootHash(void)
 
 	// Make a hex string out of the hash
 
-	CFIndex length = CFDataGetLength(hash) * 2 + 1;
-	char *manifestHash = (char*)calloc(length, sizeof(char));
+    char *manifestHash;
 
-	int ret = sha1_to_str(CFDataGetBytePtr(hash), CFDataGetLength(hash), manifestHash, length);
+    if (READ_NEW_IORegistryEntry) {
+        CFStringRef root_snapshot_name = CFStringCreateFromExternalRepresentation(NULL, hash, kCFStringEncodingUTF8);
+        CFRelease(hash);
+        CFIndex length = CFStringGetMaximumSizeForEncoding(CFStringGetLength(root_snapshot_name), kCFStringEncodingUTF8) + 1;
+        manifestHash = (char*)calloc(length, sizeof(char));
 
-	CFRelease(hash);
+        CFStringGetCString(root_snapshot_name, manifestHash, length, kCFStringEncodingUTF8);
 
-	if (ret != ERR_SUCCESS) {
-		printf("Unable to generate bootHash string\n");
-		free(manifestHash);
-		return NULL;
-	}
+        CFRelease(root_snapshot_name);
+    } else {
+        CFIndex length = CFDataGetLength(hash) * 2 + 1;
+        manifestHash = (char*)calloc(length, sizeof(char));
+
+        int ret = sha1_to_str(CFDataGetBytePtr(hash), CFDataGetLength(hash), manifestHash, length);
+
+        CFRelease(hash);
+
+        if (ret != ERR_SUCCESS) {
+            printf("Unable to generate bootHash string\n");
+            free(manifestHash);
+            return NULL;
+        }
+    }
 
 	return manifestHash;
 }
@@ -179,12 +199,16 @@ static char *copyBootHash(void)
 char *copy_system_snapshot()
 {
     char *hash = copyBootHash();
-    if (hash == NULL) {
-        return NULL;
+    if (READ_NEW_IORegistryEntry) {
+        return hash;
+    } else {
+        if (hash == NULL) {
+            return NULL;
+        }
+        char *hashsnap = malloc(strlen(APPLESNAP) + strlen(hash) + 1);
+        strcpy(hashsnap, APPLESNAP);
+        strcpy(hashsnap + strlen(APPLESNAP), hash);
+        free(hash);
+        return hashsnap;
     }
-    char *hashsnap = malloc(strlen(APPLESNAP) + strlen(hash) + 1);
-    strcpy(hashsnap, APPLESNAP);
-    strcpy(hashsnap + strlen(APPLESNAP), hash);
-    free(hash);
-    return hashsnap;
 }

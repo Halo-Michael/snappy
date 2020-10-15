@@ -82,8 +82,8 @@ void usage(void)
 #endif
 			"\t-t, --to PATH\n"
 			"\t-v, --revert NAME\tRevert to snapshot named NAME\n"
-			"\t-s, --showhash\t\tShow the name of the system snapshot for this boot-manifest-hash\n"
-			"\t-x, --to-system\t\tSet the target snapshot name to be the iOS system-snapshot\n"
+			"\t-s, --showhash\t\tShow the name of the system snapshot from IO Registry\n"
+			"\t-x, --to-system\t\tSet the target snapshot name to be the system-snapshot\n"
 			"\t-o, --orig\t\tRevert to the original pre-jailbreak snapshot\n"
 			);
 }
@@ -314,7 +314,7 @@ int main(int argc, char **argv, char **envp)
 				printf("System Snapshot: %s\n", hash);
 				free(hash);
 			} else {
-				perror("Unable to get boot-manifest-hash");
+				perror("Unable to get neither root-snapshot-name nor boot-manifest-hash");
 				error=true;
 			}
 			break;
